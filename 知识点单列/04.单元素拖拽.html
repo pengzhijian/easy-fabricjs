@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style>
+      #canvas {
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" width="500" height="500"></canvas>
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const square = {
+        x: 50,
+        y: 50,
+        size: 50,
+        color: "blue",
+        isDragging: false,
+      };
+
+      let startX, startY; // 记录鼠标按下时鼠标的坐标
+      let lastSquareX = square.x, lastSquareY = square.y; // 记录每次按下时方块的起始坐标
+      let offsetX = 0, offsetY = 0; // 记录每次按下后的偏移量
+      // 绘制方块
+      function drawSquare() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = square.color;
+        ctx.fillRect(square.x, square.y, square.size, square.size);
+      }
+
+      // 判断是否鼠标在方块内
+      function isMouseInSquare(mouseX, mouseY) {
+        return (
+          mouseX > square.x &&
+          mouseX < square.x + square.size &&
+          mouseY > square.y &&
+          mouseY < square.y + square.size
+        );
+      }
+
+      canvas.addEventListener("mousedown", (e) => {
+        const mouseX = e.offsetX;
+        const mouseY = e.offsetY;
+        startX = e.clientX - offsetX;
+        startY = e.clientY - offsetY;
+        if (isMouseInSquare(mouseX, mouseY)) {
+          lastSquareX = square.x;
+          lastSquareY = square.y;
+          canvas.style.cursor = "grabbing";
+          square.isDragging = true;
+        }
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
+        if (square.isDragging) {
+          canvas.style.cursor = "grabbing";
+          const mouseX = e.offsetX;
+          const mouseY = e.offsetY;
+          offsetX = e.clientX - startX;
+          offsetY = e.clientY - startY;
+          square.x = lastSquareX + offsetX;
+          square.y = lastSquareY + offsetY;
+          drawSquare();
+        }
+      });
+
+      canvas.addEventListener("mouseup", () => {
+        square.isDragging = false;
+        lastSquareX = square.x;
+        lastSquareY = square.y;
+        offsetX = 0;
+        offsetY = 0;
+        canvas.style.cursor = "default";
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        square.isDragging = false;
+        lastSquareX = square.x;
+        lastSquareY = square.y;
+        offsetX = 0;
+        offsetY = 0;
+        canvas.style.cursor = "default";
+      });
+
+      drawSquare();
+    </script>
+  </body>
+</html>

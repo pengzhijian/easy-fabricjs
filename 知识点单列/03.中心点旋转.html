@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>旋转</title>
+  <style>
+    #myCanvas {
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="myCanvas" width="400" height="400"></canvas>
+  <script>
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+    let x = 100;
+    let y = 100;
+    let width = 100;
+    let height = 100;
+    // 绘制旋转的矩形
+    function drawRectangle() {
+      ctx.fillStyle = 'red'; // 设置填充颜色为红色
+      ctx.fillRect(x, y, width, height); // 绘制矩形
+    }
+
+    /**
+     * 中心点旋转
+     * @param {CanvasRenderingContext2D} ctx canvas 2D 上下文
+     * @param {Function} callback 绘制旋转矩形的回调函数
+     * @param {Object} setting 旋转设置
+     * @param {Number} setting.angle 旋转角度，弧度制
+     */
+     function rotateCenterPoint(ctx, setting, callback) {
+      const { rectX, rectY, width, height, angle } = setting;
+      ctx.save();
+      ctx.translate(100, 0)
+      ctx.translate(rectX + width / 2, rectY + height / 2); // 平移到 (100, 100)
+      ctx.rotate(setting.angle); // 旋转 90 度
+      ctx.translate(-(rectX + width / 2), -(rectY + height / 2)); // 平移回到原点
+      callback(); // 绘制旋转矩形
+      ctx.restore(); // 恢复原始状态
+    }
+    drawRectangle()
+    rotateCenterPoint(ctx, { rectX: 100, rectY: 100, width: 100, height: 100, angle: 30 * Math.PI / 180 }, drawRectangle)
+  </script>
+</body>
+</html>

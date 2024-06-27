@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style>
+      #canvas {
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" width="500" height="500"></canvas>
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      // 判断是否鼠标在方块内
+      const isMouseInSquare = (mouseX, mouseY, squareSettings, Rect) => {
+        const { newMouseX, newMouseY } = changeMouseCoordinate(mouseX, mouseY, Rect);
+        return (
+          newMouseX > squareSettings.x &&
+          newMouseX < squareSettings.x + squareSettings.width &&
+          newMouseY > squareSettings.y &&
+          newMouseY < squareSettings.y + squareSettings.height
+        );
+      }
+
+      /**
+       * 将鼠标坐标点转换为旋转后的坐标点
+       * @param {Number} mouseX 鼠标x坐标
+       * @param {Number} mouseY 鼠标y坐标
+       * @param {Object} squareSettings 方块设置
+       * @param {Number} squareSettings.x 方块x坐标
+       * @param {Number} squareSettings.y 方块y坐标
+       * @param {Number} squareSettings.width 方块宽度
+       * @param {Number} squareSettings.height 方块高度
+       * @param {Number} squareSettings.angle 方块旋转角度（单位：度）
+       */
+      const changeMouseCoordinate = (mouseX, mouseY, squareSettings) => {
+        const { x, y, width, height, angle } = squareSettings;
+        // 方块中心点的坐标
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+
+        // 将角度转换为弧度
+        const radian = (360 - angle) * (Math.PI / 180);
+
+        // 将鼠标坐标转换为以中心点为原点的坐标
+        const relativeX = mouseX - centerX;
+        const relativeY = mouseY - centerY;
+
+        // 计算旋转后的坐标
+        const newRelativeX = relativeX * Math.cos(radian) - relativeY * Math.sin(radian);
+        const newRelativeY = relativeX * Math.sin(radian) + relativeY * Math.cos(radian);
+
+        // 将旋转后的坐标转换回原始坐标系
+        const newMouseX = newRelativeX + centerX;
+        const newMouseY = newRelativeY + centerY;
+
+        return { newMouseX, newMouseY };
+      }
+
+      /**
+       * 判断是否鼠标是拉伸模式
+       */
+      function isScaleing(canvas) {
+        if (canvas.style.cursor === 'n-resize' || canvas.style.cursor === 'e-resize' || canvas.style.cursor === 's-resize' || canvas.style.cursor === 'w-resize' || canvas.style.cursor === 'ew-resize' || canvas.style.cursor === 'ns-resize' || canvas.style.cursor === 'nesw-resize' || canvas.style.cursor === 'nwse-resize' || canvas.style.cursor === 'col-resize' || canvas.style.cursor === 'all-scroll') {
+          return true;
+        } else {
+          return false;
+        }
+      }
+
+      /**
+       * 中心点旋转
+       * @param {CanvasRenderingContext2D} ctx canvas 2D 上下文
+       * @param {Function} callback 绘制旋转矩形的回调函数
+       * @param {Object} setting 旋转设置
+       * @param {Number} setting.angle 旋转角度，弧度制
+       */
+      function rotateCenterPoint(ctx, setting, callback) {
+        const { rectX, rectY, width, height, angle } = setting;
+        ctx.save();
+        ctx.translate(rectX + width / 2, rectY + height / 2); // 平移到 (100, 100)
+        ctx.rotate(setting.angle); // 旋转 90 度
+        ctx.translate(-(rectX + width / 2), -(rectY + height / 2)); // 平移回到原点
+        if (callback) {
+          callback(); // 绘制旋转矩形
+        }
+        ctx.restore(); // 恢复原始状态
+      }
+
+      /**
+       * 缩放功能
+       * callback 绘制旋转矩形的函数
+       * mode 从什么地方缩放
+       * setting.rectX 矩形 x 坐标
+       * setting.rectY 矩形 y 坐标
+       * setting.width 矩形宽度
+       * setting.height 矩形高度
+       * setting.scaleX 缩放比例 x
+       * setting.scaleY 缩放比例 y
+       */
+      function scaleRect(ctx, setting, callback) {
+        const { rectX, rectY, width, height, scaleX, scaleY, scaleMode } = setting;
+        ctx.save();
+        ctx.translate(rectX, rectY); // 平移到 (0, 0)
+        ctx.scale(scaleX, scaleY);
+        let translateX = 0;
+        let translateY = 0;
+        if (scaleMode === 'left-top') {
+          // 左上角点固定的缩放
+        } else if (scaleMode == 'right-top') {
+          // 右上角点固定的缩放
+          translateX = (width - width * scaleX) / scaleX; // 补偿偏移量
+        } else if (scaleMode == 'left-bottom') {
+          // 左下角点固定的缩放
+          translateY = (height - height * scaleY) / scaleY; // 补偿偏移量
+        } else if (scaleMode == 'right-bottom') {
+          // 右下角点固定的缩放
+          translateX = (width - width * scaleX) / scaleX; // 补偿偏移量
+          translateY = (height - height * scaleY) / scaleY; // 补偿偏移量
+        }
+        ctx.translate(translateX, translateY);
+        ctx.translate(-rectX, -rectY); // 平移回到原点
+        if (callback) {
+          callback();
+        }
+        ctx.restore(); // 恢复原始状态
+        return {
+          rectX: rectX + translateX * scaleX,
+          rectY: rectY + translateY * scaleY,
+          width: width * scaleX,
+          height: height * scaleY,
+        }
+      }
+
+      class mySquare {
+        isDragging = false; // 方块是否被拖拽
+        isSelected = false; // 方块是否被选中
+        isScaled = false; // 方块是否正在被拉伸
+        borderLineWidth = 2;
+        angle = 0;
+        constructor(canvas, squareSettings) {
+          this.x = squareSettings.x; // 方块的x坐标
+          this.y = squareSettings.y; // 方块的y坐标
+          this.width = squareSettings.width; // 方块的宽度
+          this.height = squareSettings.height; // 方块的高度
+          this.color = squareSettings.color; // 方块的颜色
+          this.canvas = canvas; // 画布
+
+          this.squareHandler(canvas); // 注册方块的鼠标点击移动等事件
+
+          this.ctxDraw(canvas); // 注册ctx的统一绘画方法
+
+          ctx.draw(); // 绘制所有图层
+        }
+
+        // 绘制方块
+        drawSquare(canvas) {
+          const ctx = canvas.getContext("2d");
+          // 当在本图层绘制时才绘制
+          if (this.level === ctx.nowLevel) {
+            ctx.save();
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            ctx.restore();
+            // 当被选中后画边框
+            if (this.isSelected) {
+              this.drawBorderSquare(canvas, {
+                borderLineWidth: this.borderLineWidth
+              });
+            }
+          }
+        }
+
+        // 将图层挂载在ctx上再统一绘制
+        ctxDraw(canvas) {
+          const ctx = canvas.getContext("2d");
+          // 将图层挂载在ctx上
+          if (!ctx.level) {
+            ctx.level = 0;
+          }
+          ctx.level++; // 图层数加1
+          this.level = ctx.level; // 记录此对象的图层数
+
+          // 存储每一个新增的mySquare对象
+          if (!ctx.drawItemList) {
+            ctx.drawItemList = [];
+          }
+          ctx.drawItemList.push(this);
+
+          // 添加ctx的统一绘画方法
+          if (!ctx.draw) {
+            ctx.draw = () => {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              for (let i = 0; i <= ctx.level; i++) {
+                ctx.nowLevel = i;
+                ctx.drawItemList.forEach((item) => {
+                  // item.drawSquare(canvas);
+                  // 新增旋转功能
+                  rotateCenterPoint(ctx, {
+                    rectX: item.x,
+                    rectY: item.y,
+                    width: item.width,
+                    height: item.height,
+                    angle: item.angle * Math.PI / 180,
+                  }, item.drawSquare.bind(item, canvas));
+                });
+              }
+            };
+          }
+        }
+
+        // 方块的鼠标点击移动等事件
+        squareHandler(canvas) {
+          const ctx = canvas.getContext("2d");
+
+          let startX, startY; // 记录鼠标按下时鼠标的坐标
+          let lastSquareX = this.x, lastSquareY = this.y; // 记录每次按下时方块的起始坐标
+          let offsetX = 0, offsetY = 0; // 记录每次按下后的偏移量
+
+          const { dragMove, dragDown, dragUp } = this.dragMouseHandler(canvas);
+          const { scaleMouseDown, scaleMouseMove, scaleMouseUp } = this.scaleMouseHandler(canvas);
+
+          // 方法单列出来，方便后续注销事件
+          this.mousedownHandler = (e) => {
+            dragDown(e);
+            scaleMouseDown(e);
+          }
+
+          this.mousemoveHandler = (e) => {
+            dragMove(e);
+            scaleMouseMove(e);
+          }
+
+          this.mouseupHandler = (e) => {
+            dragUp(e);
+            scaleMouseUp(e);
+          }
+
+          // 注册鼠标事件
+          canvas.addEventListener("mousedown", this.mousedownHandler);
+          canvas.addEventListener("mousemove", this.mousemoveHandler);
+          canvas.addEventListener("mouseup", this.mouseupHandler);
+          canvas.addEventListener("mouseleave", this.mouseupHandler);
+        }
+
+        // 边框和四角拉伸功能 旋转功能
+        scaleMouseHandler(canvas) {
+          const ctx = canvas.getContext("2d");
+          let startX, startY; // 记录鼠标按下时鼠标的坐标
+          let offsetX = 0, offsetY = 0; // 记录每次按下后的偏移量
+          let startWidth, startHeight; // 记录鼠标按下时方块的宽度和高度
+          let startRectX, startRectY; // 记录鼠标按下时方块的坐标
+          const mousedownHandler = (e) => {
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+            offsetX = 0;
+            offsetY = 0;
+            startWidth = this.width;
+            startHeight = this.height;
+            startRectX = this.x;
+            startRectY = this.y;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+            if (this.isSelected) {
+              if (this.isMouseInBorder(mouseX, mouseY, 'left')) {
+                // 检测是否在左边框内
+                this.isScaled = 'left';
+                canvas.style.cursor = "ew-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'right')) {
+                // 检测是否在右边框内
+                this.isScaled = 'right';
+                canvas.style.cursor = "ew-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'top')) {
+                // 检测是否在上边框内
+                this.isScaled = 'top';
+                canvas.style.cursor = "ns-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'bottom')) {
+                // 检测是否在上边框内
+                this.isScaled = 'bottom';
+                canvas.style.cursor = "ns-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'left-top')) {
+                // 检测是否在左上角
+                this.isScaled = 'left-top';
+                canvas.style.cursor = "nwse-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'left-bottom')) {
+                // 检测是否在左下角
+                this.isScaled = 'left-bottom';
+                canvas.style.cursor = "nesw-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'right-top')) {
+                // 检测是否在右上角
+                this.isScaled = 'right-top';
+                canvas.style.cursor = "nesw-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'right-bottom')) {
+                // 检测是否在右下角
+                this.isScaled = 'right-bottom';
+                canvas.style.cursor = "nwse-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'center-bottom')) {
+                // 检测是否在下方
+                this.isScaled = 'center-bottom';
+                canvas.style.cursor = "all-scroll";
+              }
+            }
+          }
+
+          const mousemoveHandler = (e) => {
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+            if (this.isSelected) {
+              if (this.isMouseInBorder(mouseX, mouseY, 'left') && !this.isScaled) {
+                // 检测是否在左边框内
+                canvas.style.cursor = "ew-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'right') && !this.isScaled) {
+                // 检测是否在右边框内
+                canvas.style.cursor = "ew-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'top') && !this.isScaled) {
+                // 检测是否在上边框内
+                canvas.style.cursor = "ns-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'bottom') && !this.isScaled) {
+                // 检测是否在下边框内
+                canvas.style.cursor = "ns-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'left-top') && !this.isScaled) {
+                // 检测是否在左上角
+                canvas.style.cursor = "nwse-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'left-bottom') && !this.isScaled) {
+                // 检测是否在左下角
+                canvas.style.cursor = "nesw-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'right-top') && !this.isScaled) {
+                // 检测是否在右上角
+                canvas.style.cursor = "nesw-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'right-bottom') && !this.isScaled) {
+                // 检测是否在右下角
+                canvas.style.cursor = "nwse-resize";
+              } else if (this.isMouseInBorder(mouseX, mouseY, 'center-bottom') && !this.isScaled) {
+                // 检测是否在右下角
+                canvas.style.cursor = "all-scroll";
+              } else if (!this.isDragging && !this.isScaled ) {
+                // 不在边框内时，且不在拉伸和拖拽状态时，回复鼠标指针
+                canvas.style.cursor = "default";
+              }
+
+              if (this.isScaled) {
+                // 边框拉伸功能
+                offsetX = e.clientX - startX;
+                offsetY = e.clientY - startY;
+                let tempOffset = Math.abs(offsetX) > Math.abs(offsetY) ? offsetX : offsetY;
+                const helpObj = {
+                  startRectX: startRectX,
+                  startRectY: startRectY,
+                  startWidth: startWidth,
+                  startHeight: startHeight,
+                  startX: startX,
+                  startY: startY,
+                  scaleX: 1,
+                  scaleY: 1,
+                  scaleMode: 'left-top',
+                  limitName: 'width'
+                }
+                if (this.isScaled === 'left') {
+                  // 左边框拉伸
+                  helpObj.scaleMode = 'right-top'
+                  helpObj.scaleX = (startWidth - offsetX) / startWidth
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'right') {
+                  // 右边框拉伸
+                  helpObj.scaleMode = 'left-top'
+                  helpObj.scaleX = (startWidth + offsetX) / startWidth
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'top') {
+                  // 上边框拉伸
+                  helpObj.limitName = 'height'
+                  helpObj.scaleMode = 'left-bottom'
+                  helpObj.scaleY = (startHeight - offsetY) / startHeight
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'bottom') {
+                  // 下边框拉伸
+                  helpObj.limitName = 'height'
+                  helpObj.scaleMode = 'left-top'
+                  helpObj.scaleY = (startHeight + offsetY) / startHeight
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'left-top') {
+                  const tempScale = Math.abs(offsetX) > Math.abs(offsetY) ? (this.height - offsetY) / this.height : (this.width - offsetX) / this.width;
+                  // 左上角拉伸
+                  helpObj.scaleMode = 'right-bottom'
+                  helpObj.scaleX = (startWidth - offsetX) / startWidth
+                  helpObj.scaleY = (startHeight - offsetY) / startHeight
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'left-bottom') {
+                  const tempScale = Math.abs(offsetX) > Math.abs(offsetY) ? (this.height - offsetY) / this.height : (this.width - offsetX) / this.width;
+                  // 左下角拉伸
+                  helpObj.limitName = 'height'
+                  helpObj.scaleMode = 'right-top'
+                  helpObj.scaleX = (startWidth - offsetX) / startWidth
+                  helpObj.scaleY = (startHeight + offsetY) / startHeight
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'right-top') {
+                  const tempScale = Math.abs(offsetX) > Math.abs(offsetY) ? (this.height - offsetY) / this.height : (this.width - offsetX) / this.width;
+                  // 右上角拉伸
+                  helpObj.limitName = 'height'
+                  helpObj.scaleMode = 'left-bottom'
+                  helpObj.scaleX = (startWidth + offsetX) / startWidth
+                  helpObj.scaleY = (startHeight - offsetY) / startHeight
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'right-bottom') {
+                  // 右下角拉伸
+                  helpObj.limitName = 'height'
+                  helpObj.scaleMode = 'left-top'
+                  helpObj.scaleX = (startWidth + offsetX) / startWidth
+                  helpObj.scaleY = (startHeight + offsetY) / startHeight
+                  this.scaleHelpFunc(helpObj)
+                } else if (this.isScaled === 'center-bottom') {
+                  // 中心点的坐标离鼠标的距离
+                  const tempX = mouseX - (this.x + this.width / 2);
+                  const tempY = mouseY - (this.y + this.height / 2);
+                  // 旋转的角度
+                  this.angle = Math.atan2(tempY, tempX) * 180 / Math.PI - 90;
+                  if (this.angle < 0) {
+                    this.angle = 360 + this.angle;
+                  }
+                  ctx.draw();
+                }
+              }
+            }
+          }
+
+          const mouseupHandler = (e) => {
+            this.isScaled = false;
+          }
+
+          return {
+            scaleMouseDown: mousedownHandler,
+            scaleMouseMove: mousemoveHandler,
+            scaleMouseUp: mouseupHandler
+          }
+        }
+
+        // 缩放的重复代码太多，抽离出来
+        scaleHelpFunc(obj) {
+          const tmpInfo = scaleRect(ctx, {
+            rectX: obj.startRectX,
+            rectY: obj.startRectY,
+            width: obj.startWidth,
+            height: obj.startHeight,
+            scaleX: obj.scaleX,
+            scaleY: obj.scaleY,
+            scaleMode: obj.scaleMode
+          })
+          if (tmpInfo[obj.limitName] >= 20) {
+            this.x = tmpInfo.rectX;
+            this.width = tmpInfo.width;
+            this.y = tmpInfo.rectY;
+            this.height = tmpInfo.height;
+            ctx.draw();
+          }
+        }
+
+        // 将拖拽方法抽离出来
+        dragMouseHandler(canvas) {
+          const ctx = canvas.getContext("2d");
+          let startX, startY; // 记录鼠标按下时鼠标的坐标
+          let lastSquareX = this.x, lastSquareY = this.y; // 记录每次按下时方块的起始坐标
+          let offsetX = 0, offsetY = 0; // 记录每次按下后的偏移量
+
+          // 方法单列出来，方便后续注销事件
+          const mousedownHandler = (e) => {
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+            if (isMouseInSquare(mouseX, mouseY, {
+              x: this.x,
+              y: this.y,
+              width: this.width,
+              height: this.height,
+            }, this) && !isScaleing(canvas)) {
+              lastSquareX = this.x;
+              lastSquareY = this.y;
+              canvas.style.cursor = "grabbing";
+              this.isDragging = true;
+              this.isSelected = true;
+              // 当点击的对象不为最高层级时，将其挂载在最高层级
+              if (ctx.level !== this.level) {
+                ctx.drawItemList.forEach((item) => {
+                  item.isDragging = false;
+                  item.isSelected = false;
+                  // 将之前比当前对象图层数高的对象减1
+                  if (item.level > this.level) {
+                    item.level--;
+                  }
+                });
+                this.isDragging = true
+                this.isSelected = true;
+                this.level = ctx.level; // 提到最高层级
+                // 重新注册鼠标事件，这个代表着执行顺序，最新注册的最后执行
+                canvas.removeEventListener('mousedown', this.mousedownHandler)
+                canvas.removeEventListener('mousemove', this.mousemoveHandler)
+                canvas.addEventListener('mousedown', this.mousedownHandler)
+                canvas.addEventListener('mousemove', this.mousemoveHandler)
+              }
+            } else {
+              // 添加一些宽限方便边界拉伸
+              if (!isMouseInSquare(mouseX, mouseY, {
+                x: this.x - this.borderLineWidth - 5,
+                y: this.y - this.borderLineWidth - 5,
+                width: this.width + this.borderLineWidth * 2 + 10,
+                height: this.height + this.borderLineWidth * 2 + 10,
+              }, this) && !isScaleing(canvas)) {
+                // console.log('不在方块内')
+                this.isSelected = false;
+                ctx.draw();
+              }
+            }
+          }
+
+          const mousemoveHandler = (e) => {
+            if (this.isDragging) {
+              canvas.style.cursor = "grabbing";
+              const mouseX = e.offsetX;
+              const mouseY = e.offsetY;
+              offsetX = e.clientX - startX;
+              offsetY = e.clientY - startY;
+              this.x = lastSquareX + offsetX;
+              this.y = lastSquareY + offsetY;
+              ctx.draw();
+            }
+          }
+
+          const mouseupHandler = (e) => {
+            this.isDragging = false;
+            lastSquareX = this.x;
+            lastSquareY = this.y;
+            offsetX = 0;
+            offsetY = 0;
+            canvas.style.cursor = "default";
+          }
+
+          return {
+            dragMove: mousemoveHandler,
+            dragDown: mousedownHandler,
+            dragUp: mouseupHandler
+          }
+        }
+
+        // 画选中后的框框
+        drawBorderSquare(canvas, setting) {
+          const ctx = canvas.getContext("2d");
+          ctx.save();
+          ctx.strokeStyle = '#51B9F9';
+          ctx.lineWidth = setting.borderLineWidth; // 边框宽度
+          ctx.strokeRect(this.x - Math.floor(setting.borderLineWidth / 2), this.y - Math.floor(setting.borderLineWidth / 2), this.width + setting.borderLineWidth, this.height + setting.borderLineWidth)
+          // 恢复到之前的状态
+          ctx.restore();
+
+          // 画边框的5个圆
+          this.drawCircle(ctx, this.x, this.y);
+          this.drawCircle(ctx, this.x + this.width, this.y);
+          this.drawCircle(ctx, this.x, this.y + this.height);
+          this.drawCircle(ctx, this.x + this.width, this.y + this.height);
+          this.drawCircle(ctx, this.x + this.width / 2, this.y + this.height + 15);
+        }
+
+        // 画选中的5个圆
+        drawCircle(ctx, x, y) {
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'; // 阴影颜色
+          ctx.shadowBlur = 5; // 阴影模糊级别
+          ctx.shadowOffsetX = 0; // 阴影的水平偏移
+          ctx.shadowOffsetY = 0; // 阴影的垂直偏移
+          ctx.beginPath();
+          ctx.fillStyle = 'white';
+          ctx.arc(x, y, 6, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 判断鼠标是否在边框内
+        isMouseInBorder(mouseX, mouseY, position) {
+          if (position === 'left') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth - 5,
+              y: this.y + 5,
+              width: this.borderLineWidth + 5,
+              height: this.height - 10
+            }, this)
+          } else if (position === 'right') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth + this.width,
+              y: this.y + 5,
+              width: this.borderLineWidth + 5,
+              height: this.height - 10,
+            }, this)
+          } else if (position === 'top') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth + 5,
+              y: this.y - 5,
+              width: this.width - 10,
+              height: this.borderLineWidth + 5
+            }, this)
+          } else if (position === 'bottom') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth + 5,
+              y: this.y + this.height - this.borderLineWidth,
+              width: this.width - 10,
+              height: this.borderLineWidth + 5,
+            }, this)
+          } else if (position === 'left-top') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth - 5,
+              y: this.y - this.borderLineWidth - 5,
+              width: this.borderLineWidth + 10,
+              height: this.borderLineWidth + 10,
+            }, this)
+          } else if (position === 'right-top') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth + this.width,
+              y: this.y - 5,
+              width: this.borderLineWidth + 10,
+              height: this.borderLineWidth + 10,
+            }, this)
+          } else if (position === 'left-bottom') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth - 5,
+              y: this.y + this.height - this.borderLineWidth,
+              width: this.borderLineWidth + 10,
+              height: this.borderLineWidth + 10,
+            }, this)
+          } else if (position === 'right-bottom') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x - this.borderLineWidth + this.width,
+              y: this.y + this.height - this.borderLineWidth,
+              width: this.borderLineWidth + 10,
+              height: this.borderLineWidth + 10,
+            }, this)
+          } else if (position === 'center-bottom') {
+            return isMouseInSquare(mouseX, mouseY, {
+              x: this.x + this.width / 2 - 10,
+              y: this.y + this.height + 2,
+              width: 20,
+              height: 20,
+            }, this)
+          }
+        }
+      }
+
+      const square1 = new mySquare(canvas, {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        color: "red"
+      });
+      const square2 = new mySquare(canvas, {
+        x: 100,
+        y: 100,
+        width: 100,
+        height: 100,
+        color: "blue"
+      });
+      // const square2 = new mySquare(canvas, {
+      //   x: 0,
+      //   y: 0,
+      //   width: 50,
+      //   height: 50,
+      //   color: "yellow"
+      // });
+
+      // const square3 = new mySquare(canvas, {
+      //   x: 200,
+      //   y: 0,
+      //   width: 30,
+      //   height: 50,
+      //   color: "blue"
+      // });
+    </script>
+  </body>
+</html>

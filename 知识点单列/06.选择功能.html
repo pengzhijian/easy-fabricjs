@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style>
+      #canvas {
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" width="500" height="500"></canvas>
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      // 判断是否鼠标在方块内
+      function isMouseInSquare(mouseX, mouseY, squareSettings) {
+        return (
+          mouseX > squareSettings.x &&
+          mouseX < squareSettings.x + squareSettings.width &&
+          mouseY > squareSettings.y &&
+          mouseY < squareSettings.y + squareSettings.height
+        );
+      }
+
+      class mySquare {
+        isDragging = false; // 方块是否被拖拽
+        isSelected = false; // 方块是否被选中
+        constructor(canvas, squareSettings) {
+          this.x = squareSettings.x; // 方块的x坐标
+          this.y = squareSettings.y; // 方块的y坐标
+          this.width = squareSettings.width; // 方块的宽度
+          this.height = squareSettings.height; // 方块的高度
+          this.color = squareSettings.color; // 方块的颜色
+          this.canvas = canvas; // 画布
+
+          this.squareHandler(canvas); // 注册方块的鼠标点击移动等事件
+
+          this.ctxDraw(canvas); // 注册ctx的统一绘画方法
+
+          ctx.draw(); // 绘制所有图层
+        }
+
+        // 绘制方块
+        drawSquare(canvas) {
+          const ctx = canvas.getContext("2d");
+          // 当在本图层绘制时才绘制
+          if (this.level === ctx.nowLevel) {
+            ctx.save();
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            ctx.restore();
+            // 当被选中后画边框
+            if (this.isSelected) {
+              this.drawBorderSquare(canvas, {
+                borderLineWidth: 2
+              });
+            }
+          }
+        }
+
+        // 将图层挂载在ctx上再统一绘制
+        ctxDraw(canvas) {
+          const ctx = canvas.getContext("2d");
+          // 将图层挂载在ctx上
+          if (!ctx.level) {
+            ctx.level = 0;
+          }
+          ctx.level++; // 图层数加1
+          this.level = ctx.level; // 记录此对象的图层数
+
+          // 存储每一个新增的mySquare对象
+          if (!ctx.drawItemList) {
+            ctx.drawItemList = [];
+          }
+          ctx.drawItemList.push(this);
+
+          // 添加ctx的统一绘画方法
+          if (!ctx.draw) {
+            ctx.draw = () => {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              for (let i = 0; i <= ctx.level; i++) {
+                ctx.nowLevel = i;
+                ctx.drawItemList.forEach((item) => {
+                  item.drawSquare(canvas);
+                });
+              }
+            };
+          }
+        }
+
+        // 方块的鼠标点击移动等事件
+        squareHandler(canvas) {
+          const ctx = canvas.getContext("2d");
+
+          let startX, startY; // 记录鼠标按下时鼠标的坐标
+          let lastSquareX = this.x, lastSquareY = this.y; // 记录每次按下时方块的起始坐标
+          let offsetX = 0, offsetY = 0; // 记录每次按下后的偏移量
+
+          const { dragMove, dragDown, dragUp } = this.dragMouseHandler(canvas);
+
+          // 方法单列出来，方便后续注销事件
+          const mousedownHandler = (e) => {
+            dragDown(e);
+          }
+
+          const mousemoveHandler = (e) => {
+            dragMove(e);
+          }
+
+          const mouseupHandler = (e) => {
+            dragUp(e);
+          }
+
+          // 注册鼠标事件
+          canvas.addEventListener("mousedown", mousedownHandler);
+          canvas.addEventListener("mousemove", mousemoveHandler);
+          canvas.addEventListener("mouseup", mouseupHandler);
+          canvas.addEventListener("mouseleave", mouseupHandler);
+        }
+
+        // 将拖拽方法抽离出来
+        dragMouseHandler(canvas) {
+          const ctx = canvas.getContext("2d");
+          let startX, startY; // 记录鼠标按下时鼠标的坐标
+          let lastSquareX = this.x, lastSquareY = this.y; // 记录每次按下时方块的起始坐标
+          let offsetX = 0, offsetY = 0; // 记录每次按下后的偏移量
+
+          // 方法单列出来，方便后续注销事件
+          const mousedownHandler = (e) => {
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+            if (isMouseInSquare(mouseX, mouseY, {
+              x: this.x,
+              y: this.y,
+              width: this.width,
+              height: this.height
+            })) {
+              lastSquareX = this.x;
+              lastSquareY = this.y;
+              canvas.style.cursor = "grabbing";
+              this.isDragging = true;
+
+              // 当点击的对象不为最高层级时，将其挂载在最高层级
+              if (ctx.level !== this.level) {
+                ctx.drawItemList.forEach((item) => {
+                  item.isDragging = false;
+                  item.isSelected = false;
+                  // 将之前比当前对象图层数高的对象减1
+                  if (item.level > this.level) {
+                    item.level--;
+                  }
+                });
+                this.isDragging = true
+                this.isSelected = true;
+                this.level = ctx.level; // 提到最高层级
+                // 重新注册鼠标事件，这个代表着执行顺序，最新注册的最后执行
+                canvas.removeEventListener('mousedown', mousedownHandler)
+                canvas.removeEventListener('mousemove', mousemoveHandler)
+                canvas.addEventListener('mousedown', mousedownHandler)
+                canvas.addEventListener('mousemove', mousemoveHandler)
+              }
+            } else {
+              this.isSelected = false;
+            }
+          }
+
+          const mousemoveHandler = (e) => {
+            if (this.isDragging) {
+              canvas.style.cursor = "grabbing";
+              const mouseX = e.offsetX;
+              const mouseY = e.offsetY;
+              offsetX = e.clientX - startX;
+              offsetY = e.clientY - startY;
+              this.x = lastSquareX + offsetX;
+              this.y = lastSquareY + offsetY;
+              ctx.draw();
+            }
+          }
+
+          const mouseupHandler = (e) => {
+            this.isDragging = false;
+            lastSquareX = this.x;
+            lastSquareY = this.y;
+            offsetX = 0;
+            offsetY = 0;
+            canvas.style.cursor = "default";
+          }
+
+          return {
+            dragMove: mousemoveHandler,
+            dragDown: mousedownHandler,
+            dragUp: mouseupHandler
+          }
+        }
+
+        // 画选中后的框框
+        drawBorderSquare(canvas, setting) {
+          const ctx = canvas.getContext("2d");
+          ctx.save();
+          ctx.strokeStyle = '#51B9F9';
+          ctx.lineWidth = setting.borderLineWidth; // 边框宽度
+          ctx.strokeRect(this.x - Math.floor(setting.borderLineWidth / 2), this.y - Math.floor(setting.borderLineWidth / 2), this.width + setting.borderLineWidth, this.height + setting.borderLineWidth)
+          // 恢复到之前的状态
+          ctx.restore();
+
+          // 画边框的5个圆
+          this.drawCircle(ctx, this.x, this.y);
+          this.drawCircle(ctx, this.x + this.width, this.y);
+          this.drawCircle(ctx, this.x, this.y + this.height);
+          this.drawCircle(ctx, this.x + this.width, this.y + this.height);
+          this.drawCircle(ctx, this.x + this.width / 2, this.y + this.height + 15);
+        }
+
+        // 画选中的5个圆
+        drawCircle(ctx, x, y) {
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'; // 阴影颜色
+          ctx.shadowBlur = 5; // 阴影模糊级别
+          ctx.shadowOffsetX = 0; // 阴影的水平偏移
+          ctx.shadowOffsetY = 0; // 阴影的垂直偏移
+          ctx.beginPath();
+          ctx.fillStyle = 'white';
+          ctx.arc(x, y, 6, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      const square1 = new mySquare(canvas, {
+        x: 100,
+        y: 100,
+        width: 100,
+        height: 100,
+        color: "red"
+      });
+
+      const square2 = new mySquare(canvas, {
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50,
+        color: "yellow"
+      });
+
+      const square3 = new mySquare(canvas, {
+        x: 200,
+        y: 0,
+        width: 30,
+        height: 50,
+        color: "blue"
+      });
+    </script>
+  </body>
+</html>

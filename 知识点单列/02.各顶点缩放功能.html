@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>缩放</title>
+  <style>
+    #myCanvas {
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="myCanvas" width="400" height="400"></canvas>
+  <script>
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let x = 100;
+    let y = 100;
+    let width = 100;
+    let height = 100;
+    // 绘制旋转的矩形
+    function drawRectangle() {
+      ctx.fillStyle = 'red'; // 设置填充颜色为红色
+      ctx.fillRect(x, y, width, height); // 绘制矩形
+    }
+
+    /**
+     * 缩放功能
+     * callback 绘制旋转矩形的函数
+     * mode 从什么地方缩放
+     * setting.rectX 矩形 x 坐标
+     * setting.rectY 矩形 y 坐标
+     * setting.width 矩形宽度
+     * setting.height 矩形高度
+     * setting.scaleX 缩放比例 x
+     * setting.scaleY 缩放比例 y
+     */
+     function scaleRect(ctx, setting, callback) {
+      const { rectX, rectY, width, height, scaleX, scaleY, scaleMode } = setting;
+      ctx.save();
+      ctx.translate(rectX, rectY); // 平移到 (0, 0)
+      ctx.scale(scaleX, scaleY);
+      let translateX = 0;
+      let translateY = 0;
+      if (scaleMode === 'left-top') {
+        // 左上角点固定的缩放
+      } else if (scaleMode == 'right-top') {
+        // 右上角点固定的缩放
+        translateX = (width - width * scaleX) / scaleX; // 补偿偏移量
+      } else if (scaleMode == 'left-bottom') {
+        // 左下角点固定的缩放
+        translateY = (height - height * scaleY) / scaleY; // 补偿偏移量
+      } else if (scaleMode == 'right-bottom') {
+        // 右下角点固定的缩放
+        translateX = (width - width * scaleX) / scaleX; // 补偿偏移量
+        translateY = (height - height * scaleY) / scaleY; // 补偿偏移量
+      }
+      ctx.translate(translateX, translateY);
+      ctx.translate(-rectX, -rectY); // 平移回到原点
+      callback();
+      ctx.restore(); // 恢复原始状态
+      return {
+        rectX: rectX + translateX * scaleX,
+        rectY: rectY + translateY * scaleY,
+        width: width * scaleX,
+        height: height * scaleY,
+      }
+    }
+
+    // scaleRect(ctx, {
+    //   rectX: x,
+    //   rectY: y,
+    //   width: width,
+    //   height: height,
+    //   scaleX: 1.5,
+    //   scaleY: 1.5,
+    //   scaleMode: 'left-top',
+    // }, drawRectangle)
+    scaleRect(ctx, {
+      rectX: x,
+      rectY: y,
+      width: width,
+      height: height,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      scaleMode: 'left-bottom',
+    }, drawRectangle)
+
+    ctx.fillStyle = 'yellow'; // 设置填充颜色为红色
+    ctx.fillRect(100, 100, 100, 100); // 绘制矩形
+  </script>
+</body>
+</html>

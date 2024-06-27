@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas Mouse Detection</title>
+  <style>
+    #myCanvas {
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="myCanvas" width="400" height="400"></canvas>
+  <script>
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 绘制旋转和缩放的矩形
+    function drawRectangle() {
+      ctx.save();
+      ctx.translate(100, 100); // 平移到 (100, 100)
+      ctx.rotate(Math.PI / 2); // 旋转 90 度
+      ctx.scale(1.5, 1.5); // 缩放
+      ctx.fillStyle = 'red'; // 设置填充颜色为红色
+      ctx.fillRect(10, 10, 100, 100); // 绘制矩形
+      ctx.restore(); // 恢复原始状态
+    }
+
+    drawRectangle(); // 调用函数绘制矩形
+
+    // 处理鼠标点击事件
+    function handleMouseClick(event) {
+      // 获取鼠标相对于画布的位置
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      // 使用逆变换将鼠标坐标转换回绘制时的坐标系
+      ctx.save();
+      ctx.translate(100, 100); // 与绘制时相同的平移
+      ctx.rotate(Math.PI / 2); // 与绘制时相同的旋转
+      ctx.scale(1.5, 1.5); // 与绘制时相同的缩放
+
+      // 逆变换
+      const invMouseX = (mouseX - 100) / 1.5; // 逆缩放
+      const invMouseY = (mouseY - 100) / 1.5; // 逆缩放
+
+      const rotatedMouseX = invMouseY;
+      const rotatedMouseY = -invMouseX;
+
+      // 检查转换后的鼠标坐标是否在矩形范围内
+      const rectX = 10;
+      const rectY = 10;
+      const rectWidth = 100;
+      const rectHeight = 100;
+
+      if (
+        rotatedMouseX >= rectX &&
+        rotatedMouseX <= rectX + rectWidth &&
+        rotatedMouseY >= rectY &&
+        rotatedMouseY <= rectY + rectHeight
+      ) {
+        console.log('鼠标在矩形内.');
+      } else {
+        console.log('鼠标不在矩形内.');
+      }
+
+      ctx.restore(); // 恢复原始状态
+    }
+
+    // 添加鼠标点击事件监听器
+    canvas.addEventListener('click', handleMouseClick);
+  </script>
+</body>
+</html>
